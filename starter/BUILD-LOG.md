@@ -53,3 +53,45 @@ evidence, and a log that arrives in one commit at the end reads as what it is.
 - **Verification**:
   - `node scripts/check-permissions.js` -> 35 passed, 0 failed.
   - `npm run personalisation` -> 18 passed, 0 failed (handled overlay `reviewer` / `device:reboot` in `Ironside Labs`).
+
+---
+
+## 2026-09-27 · Phase 3 — orgs, members, invites, devices, grants
+
+- **Implementation**:
+  - `server/lifecycle.js`: `roleRanks()`, `assertCanModify()`, `assertNotLastOwner()`, `endActiveSessions()`, `snapshotAuthority()`.
+  - `server/routes/orgs.js`: Org CRUD, member list, self-leave, role assignment, suspend/reinstate, member removal.
+  - `server/routes/invites.js`: Hashed invite token generation, single-use acceptance, membership invitation state.
+  - `server/routes/devices.js`: Device CRUD with row exclusion on `device:view`, device transfer across orgs, and grant management.
+- **Discovery A1 (Re-inviting removed member)**:
+  - *Observation*: `schema.sql` defines `UNIQUE(org_id, user_id)` on `memberships`. When a user is removed, their row is set to `status = 'removed'`, preserving audit integrity.
+  - *Problem*: Re-inviting an email of an existing user triggered `INSERT INTO memberships (..., 'invited')`, failing with `UNIQUE constraint failed: memberships.org_id, memberships.user_id`.
+  - *Fix*: In `invites.js`, checked for an existing membership row. If present, updated `status = 'invited', role = ?, invited_by = ?`; otherwise inserted a new row.
+- **Separation of modification rank from permissions (D8)**:
+  - `roles.rank` dictates who may modify whom. Verified that `auditor` and `operator` are unordered by permissions, so `roles.rank` is never consulted by `can()` or `resolve()`.
+- **Privilege laundering prevention across scopes (A3 / D9)**:
+  - `assertMayGrant(db, ctx, wanted, deviceId)` resolves caller's permissions with `deviceId` matching the grant scope. An admin with an org-wide deny cannot confer that permission, and a device-scoped allow cannot be laundered into an org-wide grant.
+
+---
+
+## 2026-09-27 · Phase 4 — sessions, audit, and auth pipeline
+
+- **Implementation**:
+  - `server/routes/sessions.js`: Session creation with compound checks, lazy TTL sweep, deliberate termination.
+  - `server/audit.js`: Append-only audit logging and `auditDenials()` wrapper.
+  - `server/routes/auth.js`: Login, org-switch token issuance, rotating refresh tokens with reuse/family revocation.
+  - `server/routes/index.js`: Route registration in specific-first order (`/members/me` before `/members/:userId`).
+- **Compound check error specificity (B2)**:
+  - Verified `assertCanStartSession()` enforces `session:start` first (reporting `missing_permission` on failure), followed by the mode-specific permission on that device (reporting `missing_device_permission`).
+- **Database concurrency for exclusive sessions (B5)**:
+  - Leveraged SQLite partial unique index `one_exclusive_session_per_device` for `control` and `terminal` modes. On collision, caught `SQLITE_CONSTRAINT` and returned HTTP 409 with code `DEVICE_BUSY`.
+- **Grandfathering vs Cascade (B3)**:
+  - Grandfathering verified: demoting Sam from operator to viewer does not terminate her live active session (verified `end_reason` remains null); only subsequent sessions are blocked.
+  - Tenancy events cascade: suspending a user or transferring a device terminates active sessions immediately.
+- **Closed vocabulary constraint on end_reason (A7)**:
+  - Schema `CHECK` constraint strictly bounds `end_reason` to 7 values (`user_stopped`, `user_suspended`, `membership_removed`, `device_transferred`, `admin_terminated`, `session_expired`, `superseded`). Reused `device_transferred` on device decommission.
+- **Auditing denials only (Invariant 10)**:
+  - Denied mutations are captured via `auditDenials()`, recording `reason_code`. Denied reads (`GET`) are omitted to avoid log pollution.
+- **Alphabetical default org selection (A8)**:
+  - When logging in without `orgId`, `membershipsOf()` orders by `o.name ASC`, selecting the alphabetically first org.
+- **Verification**: `node scripts/check-api.js` -> 66 passed, 0 failed.

@@ -42,11 +42,35 @@ Rules, from `DISCOVERY-BRIEF.md`:
 
 ---
 
-### Batched resolution instead of cached resolution
-**What I chose:** `resolveDevices()` loads catalogue, membership, baseline, and all active grants in a single SQL query per request, filtering rows in memory. No persistent cache or TTL.
-**Why:** A cache keyed by `userId` alone leaks authority across organization boundaries (violating tenancy isolation). A cache with a TTL would serve authority that was revoked milliseconds earlier (violating D7).
-**What I rejected:** An in-memory cache keyed by `(userId, orgId)` with TTL.
-**What would change my mind:** If database query latency under heavy concurrency exceeded SLA limits, justifying a version-invalidated cache tied to `memberships.perm_version`.
+### Re-inviting removed member updates existing membership row
+**What I chose:** In `server/routes/invites.js`, when issuing an invite for an existing user, check if a membership row for `(org_id, user_id)` exists. If present, update `status = 'invited', role = ?, invited_by = ?`; otherwise insert a new row.
+**Why:** The schema enforces `UNIQUE(org_id, user_id)`. Removed members are soft-marked with `status = 'removed'` rather than hard-deleted. Calling `INSERT` unconditionally throws `SQLITE_CONSTRAINT: UNIQUE constraint failed: memberships.org_id, memberships.user_id`. Updating the existing record preserves historical row IDs while resetting the membership lifecycle.
+**What I rejected:** Deleting the removed member record before inserting. That destroys historical references in audit logs and session history.
+**What would change my mind:** If the schema used a partial unique index `WHERE status != 'removed'`, permitting multiple historical rows.
+
+---
+
+### Privilege laundering check bound to target grant scope (A3 / D9)
+**What I chose:** In `assertMayGrant(db, ctx, wanted, deviceId)`, resolve the caller's own permissions using the exact `deviceId` specified by the grant (`null` for org-wide grants, or the target device ID for device-scoped grants).
+**Why:** D9 states you cannot grant authority you do not hold at that scope. If `deviceId` were ignored (or defaulted to `null` for device-scoped grants), an administrator holding a device-scoped allow could grant an org-wide permission, or vice versa.
+**What I rejected:** Resolving only at the org level (`deviceId = null`) for all grants. That would allow cross-scope authority elevation.
+**What would change my mind:** If the security model allowed delegation above the granter's current effective scope with external approval workflows.
+
+---
+
+### Exclusivity concurrency enforced by database partial unique index (B5)
+**What I chose:** Rely directly on SQLite index `one_exclusive_session_per_device` to enforce that only one active `control` or `terminal` session can exist per device. Catch `SQLITE_CONSTRAINT` and throw 409 `DEVICE_BUSY`.
+**Why:** Application-level `SELECT ... WHERE state='active'` followed by `INSERT` has an inherent check-then-act race window under parallel concurrent requests. A unique index guarantees atomic enforcement at the storage engine level.
+**What I rejected:** In-memory mutexes or locks in Node.js. They fail across multi-process clusters or restarts.
+**What would change my mind:** If SQLite did not support partial unique indexes.
+
+---
+
+### Auditing denials only for state mutations, not queries
+**What I chose:** In `server/audit.js`, `auditDenials()` catches `FORBIDDEN` errors on mutating endpoints (`POST`, `PATCH`, `DELETE`). Denied `GET` requests are not recorded.
+**Why:** Invariant 10 requires recording denied attempts to alter state or access protected controls. Logging every denied read floods the audit table with noise when UI components probe access permissions, obscuring genuine security-relevant incidents.
+**What I rejected:** Auditing every 403 response indiscriminately across all HTTP verbs.
+**What would change my mind:** If compliance standards (e.g. FedRAMP High) explicitly mandated logging every unauthorized query read attempt.
 
 _(To be populated across implementation phases as contradictions are encountered and defended.)_
 
