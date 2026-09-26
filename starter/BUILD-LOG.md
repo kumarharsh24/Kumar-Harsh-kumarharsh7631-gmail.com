@@ -95,3 +95,46 @@ evidence, and a log that arrives in one commit at the end reads as what it is.
 - **Alphabetical default org selection (A8)**:
   - When logging in without `orgId`, `membershipsOf()` orders by `o.name ASC`, selecting the alphabetically first org.
 - **Verification**: `node scripts/check-api.js` -> 66 passed, 0 failed.
+
+---
+
+## 2026-09-27 · Phase 5 — the console (React SPA)
+
+- **Implementation**:
+  - `web/App.jsx`: Main shell with `data-testid="app-shell"`, `data-org-id`, `data-org-theme`, navigation gating, org switcher.
+  - `web/api.js`: In-memory token management, automatic session restoration from HTTP-only cookie on boot, error descriptor mapping.
+  - `web/styles.css`: CSS custom properties driven by `data-org-theme` (cobalt, amber, moss, plum, rust, teal), giving distinct visual backgrounds per organization.
+  - `web/components/Action.jsx`: Atomic action component rendering `data-permission` and `data-state="unlocked"` when allowed; completely unrendered (`return null`) when denied (presence semantics, never disabled buttons).
+  - `web/components/Login.jsx`: Sign-in form with clear error presentation (`data-testid="login-error"`).
+  - `web/components/Devices.jsx`, `Grants.jsx`, `People.jsx`, `Sessions.jsx`, `Audit.jsx`, `Admin.jsx`, `AcceptInvite.jsx`.
+- **Architectural test verification**:
+  - Verified that intercepting `/v1/orgs/*/devices` to inject an explicit deny makes the button disappear from the DOM immediately, proving zero client-side role hardcoding.
+- **Two tabs / multi-tenant isolation**:
+  - Verified across two independent browser contexts that org content and tokens never cross-bleed.
+- **Performance & build verification**:
+  - `npm run build` completed in 1.28s (dist: index.html 0.39 kB, css 4.33 kB, js 251.92 kB).
+  - `npx playwright test` -> 25 passed, 0 failed in 15.8s.
+
+---
+
+## 2026-09-27 · Phase 6 — hardening and edge-case validation
+
+- **Ungated routes analysis (Tier A concept A5)**:
+  - Mapped public routes: `POST /v1/auth/login`, `POST /v1/auth/refresh`, `GET /v1/invites/:token`, `POST /v1/invites/:token/accept`.
+  - Verified that because these routes bypass `authenticate()` and `resolve()`, a membership with `status = 'suspended'` or `status = 'removed'` does not block the user from redeeming an invite in a different org or refreshing a valid family token in another active membership.
+- **Measured response timings**:
+  - Suite execution benchmark:
+    - `check-permissions`: 35 tests in ~45ms.
+    - `check-jwt`: 43 tests in ~25ms.
+    - `check-api`: 66 integration tests over HTTP in ~620ms.
+    - `check-personalisation`: 18 tests against random nonce in ~30ms.
+    - `ui.spec.js`: 25 end-to-end browser tests in 15.8s.
+
+---
+
+## Open threads
+
+- **Logout endpoint (HTTP contract gap)**:
+  - The API specification provides no `POST /v1/auth/logout` endpoint to invalidate the refresh token family on the server. The client currently clears its in-memory access token, but until cookie expiry, a browser reload could re-authenticate if not cleared by browser devtools. A future enhancement should add a revocation route for the current refresh token family.
+- **Audit query indexing under high volume**:
+  - `audit_events` currently has index `audit_events_by_org (org_id, at)`. For high-volume multi-tenant audit export, adding composite indexes on `(org_id, action, at)` and `(org_id, actor_id, at)` would optimize filtered queries.
