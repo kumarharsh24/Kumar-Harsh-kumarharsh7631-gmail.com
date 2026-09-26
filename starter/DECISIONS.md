@@ -18,6 +18,14 @@ Rules, from `DISCOVERY-BRIEF.md`:
 
 ---
 
+### Algorithm pinning and defensive header decoding in token verification
+**What I chose:** Decode and validate header `alg === 'HS256'` and `typ === 'JWT'` inside a try/catch before signature computation, and explicitly check buffer lengths prior to `timingSafeEqual`.
+**Why:** In `check-jwt.js`, test cases test `alg: none` confusion, asymmetric algorithm substitution (`RS256`), and malformed JSON payloads. Attempting `timingSafeEqual` with unequal lengths throws an unhandled `RangeError` (caught in `check-jwt.js:77` during development). Defensively decoding the header ensures invalid base64url or non-JSON payloads map cleanly to `401 UNAUTHENTICATED` without crashing the HTTP server.
+**What I rejected:** Blindly verifying signature before inspecting header algorithm, or trusting the algorithm declared in untrusted headers without pinning to `HS256`.
+**What would change my mind:** If the system adopted public-key cryptographic tokens (e.g., Ed25519) with a multi-key rotational keystore.
+
+---
+
 ## Where this repo argues with itself
 
 _(To be populated across implementation phases as contradictions are encountered and defended.)_
