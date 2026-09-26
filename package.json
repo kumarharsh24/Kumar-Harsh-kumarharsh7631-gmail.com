@@ -1,0 +1,16 @@
+{
+  "name": "remoteops-root",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm --prefix starter run dev",
+    "build": "npm --prefix starter run build",
+    "start": "npm --prefix starter run start",
+    "db:reset": "npm --prefix starter run db:reset",
+    "db:load": "npm --prefix starter run db:load",
+    "test": "npm --prefix starter test",
+    "test:ui": "npm --prefix starter run test:ui",
+    "personalisation": "npm --prefix starter run personalisation",
+    "fingerprint": "npm --prefix starter run fingerprint"
+  }
+}
