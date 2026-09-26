@@ -26,6 +26,30 @@ Rules, from `DISCOVERY-BRIEF.md`:
 
 ---
 
+### Unconditional deny precedence over allow without specificity carve-outs
+**What I chose:** Evaluated all active `deny` grants into a dedicated map prior to evaluating role baseline and `allow` grants; once denied, a permission cannot be granted regardless of device scope or role baseline.
+**Why:** Tested with `check-permissions.js:67` ("device-scoped ALLOW does NOT carve out org-wide DENY"). An intuitive specificity rule (device grant overrules org grant) fails this test immediately. The contract dictates that refusal outranks permission unconditionally (D1).
+**What I rejected:** Hierarchical scope-based resolution (e.g. device allow overrides org deny). This creates security loopholes where an operator explicitly denied access org-wide could regain access through a forgotten device-scoped grant.
+**What would change my mind:** If the specification introduced explicit exception/carve-out semantics with audit justifications.
+
+---
+
+### Suspension bypasses freshness check to preserve 403 'suspended'
+**What I chose:** In `server/context.js`, execute `assertFresh(claims, membership)` only when `membership.status !== 'suspended'`.
+**Why:** `AUTH-DATA-MODEL.md §1` dictates that suspending a membership increments `perm_version`. `AUTH-DATA-MODEL.md §10` dictates that an active access token belonging to a suspended membership must return 403 with `reason: 'suspended'`. If `assertFresh` is executed blindly, it throws 401 `TOKEN_STALE` before reaching `resolve()`, transforming an authorization refusal into an authentication refresh cycle.
+**What I rejected:** Not incrementing `perm_version` on suspension. That would leave the old token considered valid upon future unsuspension without re-minting.
+**What would change my mind:** If client SDKs handled `TOKEN_STALE` by refreshing and the refresh endpoint returned `403 suspended` instead.
+
+---
+
+### Batched resolution instead of cached resolution
+**What I chose:** `resolveDevices()` loads catalogue, membership, baseline, and all active grants in a single SQL query per request, filtering rows in memory. No persistent cache or TTL.
+**Why:** A cache keyed by `userId` alone leaks authority across organization boundaries (violating tenancy isolation). A cache with a TTL would serve authority that was revoked milliseconds earlier (violating D7).
+**What I rejected:** An in-memory cache keyed by `(userId, orgId)` with TTL.
+**What would change my mind:** If database query latency under heavy concurrency exceeded SLA limits, justifying a version-invalidated cache tied to `memberships.perm_version`.
+
+---
+
 ## Where this repo argues with itself
 
 _(To be populated across implementation phases as contradictions are encountered and defended.)_

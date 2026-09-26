@@ -30,3 +30,26 @@ evidence, and a log that arrives in one commit at the end reads as what it is.
 - **Half-open expiry boundary (B7)**:
   - Verified `claims.exp <= now` is rejected. A token evaluated at the exact second of expiration is considered expired (AUTH-DATA-MODEL.md §10 / D7).
 - **Verification**: `node scripts/check-jwt.js` -> 43 passed, 0 failed.
+
+---
+
+## 2026-09-26 · Phase 2 — caller context and resolution engine
+
+- **Implementation**:
+  - `server/context.js`: Bearer token extraction, org isolation, soft-deleted org hiding, and membership validation.
+  - `server/permissions.js`: Dynamic catalogue loading from `permissions` table, baseline from `role_permissions`, wildcard expansion (`*`, `device:*`), and batched `resolveDevices()`.
+- **Wrong prediction on grant precedence (B1)**:
+  - *Initial model*: Expected narrower scope to beat broader scope (e.g. a specific device allow overriding an org-wide deny).
+  - *Observation*: `check-permissions.js` asserts that a device-scoped allow does NOT carve out an org-wide deny.
+  - *Resolution*: Implemented two-pass resolution in `buildPermissions()`: pass 1 expands all active `deny` grants into a `denied` map. Pass 2 fills allows from role baseline, then from active `allow` grants. Denies are immutable once recorded.
+- **Discovery A2 (Org-level union for navigation presence)**:
+  - When `deviceId === null`, `collectGrants()` retrieves all grants for `(userId, orgId)`. If an operator holds a device-scoped grant on only one workstation, the element is allowed in the org-level union, ensuring UI nav headers (`data-testid="nav-devices"`) render unlocked.
+- **Contradiction A4 solved (Suspension vs Token Freshness)**:
+  - `AUTH-DATA-MODEL.md §1` states suspension increments `perm_version`. But `AUTH-DATA-MODEL.md §10` demands that a suspended token yields a 403 `suspended` response with an empty permission set.
+  - *Problem*: Calling `assertFresh()` first would throw 401 `TOKEN_STALE`, masking the suspension.
+  - *Fix*: In `server/context.js`, `assertFresh` is skipped specifically when `membership.status === 'suspended'`, allowing the context to form and `resolve()` to produce `deny` with reason `suspended`.
+- **Batched list resolution without N+1 or cache cross-contamination (B6)**:
+  - In `resolveDevices()`, avoided per-row SQL queries by loading catalogue, membership, and baseline once, and querying all grants in a single pass. Rows are filtered in memory. Rejected an in-memory cache keyed by `userId` because it would leak permissions across org boundaries.
+- **Verification**:
+  - `node scripts/check-permissions.js` -> 35 passed, 0 failed.
+  - `npm run personalisation` -> 18 passed, 0 failed (handled overlay `reviewer` / `device:reboot` in `Ironside Labs`).
