@@ -12,6 +12,10 @@
     "db:load": "node scripts/load-db.js",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
+    "check:jwt": "node scripts/check-jwt.js",
+    "check:permissions": "node scripts/check-permissions.js",
+    "check:api": "node scripts/check-api.js",
+    "check:all": "node scripts/check-jwt.js && node scripts/check-permissions.js && node scripts/check-api.js && node scripts/check-personalisation.js && playwright test",
     "personalisation": "node scripts/check-personalisation.js",
     "fingerprint": "node scripts/personalise.js"
   },

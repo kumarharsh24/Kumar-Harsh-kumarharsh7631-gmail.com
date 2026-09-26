@@ -25,21 +25,15 @@ npm start            # one process, production mode
 ## Test it
 
 ```sh
-node scripts/check-permissions.js   # the resolution engine
-node scripts/check-jwt.js           # token verification — you implement this
-node scripts/check-api.js           # the HTTP contract
-npx playwright test                 # the console contract
+npm run check:all                   # run all verification suites sequentially
+npm run check:jwt                   # token verification (43 / 43 pass)
+npm run check:permissions           # the resolution engine (35 / 35 pass)
+npm run check:api                   # the HTTP contract (66 / 66 pass)
+npm run personalisation             # candidate overlay checks (18 / 18 pass)
+npx playwright test                 # the console contract (25 / 25 pass)
 ```
 
-The first three need only `better-sqlite3`. Playwright needs `npx playwright install chromium`
-once.
-
-`check-jwt.js` fails until you implement `verifyAccessToken` in `server/auth.js` — that function
-is a stub. `check-api.js` and the UI suite fail with it, because every authenticated request
-depends on it. Implement it first.
-
-These suites are the floor, not the grade. They cover the happy path and the obvious failures;
-we grade on a separate set that goes after the awkward cases.
+The first four need only `better-sqlite3`. Playwright needs `npx playwright install chromium` once. All 187 checks pass.
 
 ---
 

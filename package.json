@@ -10,6 +10,10 @@
     "db:load": "npm --prefix starter run db:load",
     "test": "npm --prefix starter test",
     "test:ui": "npm --prefix starter run test:ui",
+    "check:jwt": "npm --prefix starter run check:jwt",
+    "check:permissions": "npm --prefix starter run check:permissions",
+    "check:api": "npm --prefix starter run check:api",
+    "check:all": "npm --prefix starter run check:all",
     "personalisation": "npm --prefix starter run personalisation",
     "fingerprint": "npm --prefix starter run fingerprint"
   }

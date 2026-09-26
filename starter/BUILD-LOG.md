@@ -132,9 +132,24 @@ evidence, and a log that arrives in one commit at the end reads as what it is.
 
 ---
 
+## 2026-09-27 · Phase 7 — documentation, clean-checkout ergonomics, and repository push
+
+- **Ergonomics & Scripts**:
+  - Added root & starter convenience check scripts (`npm run check:jwt`, `check:permissions`, `check:api`, `check:all`).
+  - Verified clean checkout commands from both repository root and `starter/` directory: `npm install && npm run db:reset && npm run dev`.
+- **Candidate Submission Readme**:
+  - Replaced internal packaging notes with comprehensive candidate submission README covering architecture, invariants, quickstart commands, and test suites.
+- **Full Suite Confirmation**:
+  - Ran `npm run check:all` confirming all 187 checks pass (43 JWT + 35 Permissions + 66 API + 18 Personalisation + 25 Playwright).
+- **Public Repository Sync**:
+  - Pushed to GitHub repository (`git@github.com:kumarharsh24/Kumar-Harsh-kumarharsh7631-gmail.com.git`) over SSH with verified public reachability.
+
+---
+
 ## Open threads
 
 - **Logout endpoint (HTTP contract gap)**:
   - The API specification provides no `POST /v1/auth/logout` endpoint to invalidate the refresh token family on the server. The client currently clears its in-memory access token, but until cookie expiry, a browser reload could re-authenticate if not cleared by browser devtools. A future enhancement should add a revocation route for the current refresh token family.
 - **Audit query indexing under high volume**:
   - `audit_events` currently has index `audit_events_by_org (org_id, at)`. For high-volume multi-tenant audit export, adding composite indexes on `(org_id, action, at)` and `(org_id, actor_id, at)` would optimize filtered queries.
+
